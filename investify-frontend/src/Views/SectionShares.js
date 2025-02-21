@@ -10,6 +10,7 @@ export default function SectionShares(props) {
       try{
         const response = await axios.get('/api/invest/equity');
         setData(response.data);
+        console.log(data);
         return data;
       }catch(err){
         console.log(err);

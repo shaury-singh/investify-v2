@@ -93,7 +93,8 @@ export default class OrderBook {
                 const matchedQty = Math.min(sellOrder.qty, buyOrder.qty);
                 const matchedPrice = sellOrder.price;
                 const date_of_orders = new Date().toISOString().split('T')[0];
-                addMatchedOrders({buyID: buyOrder.userID,sellID: sellOrder.userID,price: matchedPrice,qty: matchedQty,shareName:sellOrder.share,date_of_orders,});
+                console.log({buyID: buyOrder.userID,sellID: sellOrder.userID,price: matchedPrice,qty: matchedQty,shareName:sellOrder.share,date_of_orders})
+                addMatchedOrders({buyID: buyOrder.userID,sellID: sellOrder.userID,price: matchedPrice,qty: matchedQty,shareName:sellOrder.share,date_of_orders});
                 sellOrder.qty -= matchedQty;
                 buyOrder.qty -= matchedQty;
                 if (sellOrder.qty > 0) this.sellBook.enqueue(sellOrder);
@@ -112,7 +113,3 @@ export default class OrderBook {
     }
         
 }
-
-// const book = new OrderBook();
-// book.addBuyOrder(150,10,'share','sharySingh');
-// book.addSellOrder(150,10,'share','swarnika');

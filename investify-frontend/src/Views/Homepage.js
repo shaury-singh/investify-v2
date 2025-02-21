@@ -57,7 +57,7 @@ export default function Homepage() {
         <div>OTP Successfully Sent To Your Email Address!</div>
         <span onClick={hide}>{"   "}X</span>
       </div>
-      <div className="login-card pos-abs -abs-center hide" id="loginCard">
+      <div className="login-card pos-abs abs-center hide" id="loginCard">
         <div className="left-section">
           <h1>Simple, Free Investing.</h1>
           <p>Stocks</p>

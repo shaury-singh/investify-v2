@@ -30,7 +30,7 @@ app.use(express.static(path.join(__dirname, '../investify-frontend/build')));
 
 import mongoose from 'mongoose';
 const mongoURI = process.env.MONGO_URI;
-mongoose.connect(mongoURI)
+mongoose.connect("mongodb://localhost:27017/Investify")
 .then(() => {
   console.log("Connection Succeded");
 }).catch((err) => {
@@ -61,14 +61,11 @@ io.on('connection', (socket)=>{
     let chgBef = await fetchChangefromDB(order.shareName);
     const upperC = await getUpperCircuit(order.shareName);
     const lowerc = await getLowerCircuit(order.shareName);
-    // will be combined as a single function to reduce wait times in investify-v3
     const abs = await Orderbook.getCurrentMarketValue(order.shareName,upperC,lowerc);
-    // will provide relativly faster load times as written in log(n)
     if (session && session.userId && session.amount>=(order.price*order.qty)){
       session.amount = parseFloat((session.amount - (order.price*order.qty)).toFixed(2));
       Orderbook.addBuyOrder(order.price, order.qty, order.shareName, session.userId);
       const isUpdated = await findandUpdateUserId(session.userId,session.amount);
-      // will be combined with addUserSharesIntoMongoDB
       if (isUpdated){
         await addOrderIntoDatabase("buy",order.shareName,order.price,order.qty,session.userId,getOrderDate());
         await addUserSharesIntoMongoDB(session.userId,order.shareName,order.qty);
@@ -80,6 +77,10 @@ io.on('connection', (socket)=>{
         socket.emit('buyOrder',false);
       }
       const currentValue = Orderbook.getCurrentMarketValue(order.shareName,upperC,lowerc);
+      let alertCheckValue = alertCheck(order.shareName,currentValue);
+      if (alertCheckValue){
+        socket.emit('alert',{"from":"socket","shareName":order.shareName,"price":currentValue});
+      }
       if (abs == currentValue){
         await updateIntoMongoDB(order.shareName,currentValue,chgBef);
       }else{
@@ -97,7 +98,6 @@ io.on('connection', (socket)=>{
     let chgBef = await fetchChangefromDB(order.shareName);
     const upperC = await getUpperCircuit(order.shareName);
     const lowerc = await getLowerCircuit(order.shareName);
-    // will be combined as a single function to reduce wait times in investify-v3
     const abs = await Orderbook.getCurrentMarketValue(order.shareName,upperC,lowerc);
     const chechShares = await isShareAvailable(session.userId,order.shareName,order.qty);
     if (session && session.userId && chechShares){
@@ -112,6 +112,10 @@ io.on('connection', (socket)=>{
       }
       const changePerc = parseFloat(((chgBef/abs)*100).toFixed(2));
       await updateIntoMongoDB(order.shareName,currentValue,chgBef);
+      let alertCheckValue = alertCheck(order.shareName,currentValue);
+      if (alertCheckValue){
+        socket.emit('alert',{"from":"socket","shareName":order.shareName,"price":currentValue});
+      }
       socket.emit('buyOrder',true);
       io.to(order.shareName).emit('updateMarketValue', {currentValue,changePerc});
     } else {
@@ -119,6 +123,9 @@ io.on('connection', (socket)=>{
       console.log('order is not defined for this session');
     }
   })
+  // socket.on('alert', async (alertOrder)=>{
+  //   socket.emit('alert',);
+  // })
 })
 
 app.get('/', (req, res) => {
@@ -140,6 +147,7 @@ app.post('/send-otp', async (req, res) => {
     const { email } = req.body;
     // console.log(req.body);
     req.session.otp = await generateOTP(100000, 999999);
+    console.log(req.session.otp);
     const mailOptions = {
       from: process.env.MAIL_ID,
       to: email,
@@ -222,7 +230,7 @@ app.get('/api/invest/equity', authetication, async (req, res) => {
   }
 });
 
-app.get('/api/invest/getChart/:shareName',authetication,async (req,res)=>{
+app.get('/api/invest/getChart/:shareName', authetication ,async (req,res)=>{
   try{
     const shareName = req.params.shareName;
     let priceDataArray = await getGraphData(shareName);
@@ -233,9 +241,10 @@ app.get('/api/invest/getChart/:shareName',authetication,async (req,res)=>{
 })
 
 import { getShareDetails } from './searchIntoUser.js';
-import { addOrderIntoDatabase, getGraphData, getUserInvestments, getUserTotalInvestment, stockPriceUpdateMain } from './SQLconnections.js';
+import { addAlert, addOrderIntoDatabase, addToWatchList, alertCheck, getGraphData, getUserInvestments, getUserTotalInvestment, stockPriceUpdateMain } from './SQLconnections.js';
 import getOrderDate from './calculateOrderDate.js';
-app.get('/api/invest/equity/getDetails/:shareName',authetication,async (req,res)=>{
+
+app.get('/api/invest/equity/getDetails/:shareName', authetication ,async (req,res)=>{
   const shareName = req.params.shareName;
   try{
     const data = await getShareDetails(shareName);
@@ -261,7 +270,7 @@ app.get('/api/user/totalInvestments', authetication, async (req, res) => {
   }
 });
 
-app.get('/api/user/allInvestments',authetication,async(req,res)=>{
+app.get('/api/user/allInvestments', authetication ,async(req,res)=>{
   try{
     if (req.session.userId){
       const data = await getUserInvestments(req.session.userId);
@@ -272,9 +281,37 @@ app.get('/api/user/allInvestments',authetication,async(req,res)=>{
   }
 });
 
+app.post('/api/invest/users/addToWatchlist',authetication,async(req,res)=>{
+  try{
+      // console.log(req.body);
+      // console.log(req.body.body.shareName);
+      // console.log(req.body.body.listName);
+      // console.log(req.session.userId);
+      await addToWatchList(req.session.userId, req.body.body.shareName, req.body.body.listName).then(()=>{
+        console.log("Added to WatchList");
+        res.status(200).send("Updated!");
+      })
+  }catch(err){
+    console.log(err);
+    res.status(500).send("Can't Add!");
+  }
+})
+
+app.post('/api/invest/users/setAlert',authetication,async(req,res)=>{
+  try{
+    console.log(req.body);
+    await addAlert(req.body.body.shareName, req.session.userId, req.body.body.price).then(()=>{
+      console.log("Done");
+    })
+    res.status(200).send({"success":true});
+  }catch(err){
+    console.log(err);
+  }
+})
+
 app.get('/invest/equity', async (req, res) => {
   if (!req.session.token) {
-    req.session.token = jwt.sign({ userId: req.session.userId }, jwtSecret, { expiresIn: '1h' });
+    req.session.token = jwt.sign({ userId: req.session.userId }, jwtSecret, { expiresIn: '2h' });
   }
   res.sendFile(path.join(__dirname, '../investify-frontend/build', 'index.html'));
 });
@@ -288,14 +325,13 @@ app.get('*', (req, res) => {
 });
 
 setInterval(async () => {
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  if (hours === 10 || (hours === 11 && minutes < 60)) {
+  // const now = new Date();
+  // const hours = now.getHours();
+  // const minutes = now.getMinutes();
+  // if (hours === 10 || (hours === 11 && minutes < 60)) {
     await stockPriceUpdateMain();
-  }
+  // }
 }, 60000);
-
 
 const port = process.env.PORT || 5000;
 server.listen(port, () => {

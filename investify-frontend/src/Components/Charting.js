@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler } from 'chart.js';
+import Wishlists from './Wishlists';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler);
 
 export default function Charting() {
@@ -25,6 +26,8 @@ export default function Charting() {
   const [price, setPrice] = useState('');
   const [qty, setQty] = useState('');
   const [changePerc, setChangePerc] = useState(null);
+  const [alertTopBar, setAlertTopBar] = useState(false);
+  const [alertPrice, setAlertPrice] = useState(null);
 
   useEffect(()=>{
     async function fetchGraph(){
@@ -97,6 +100,9 @@ export default function Charting() {
           setTimeout(() => {setTagSuccess(false);}, 2000);
         }
       })
+      newSocket.on('alert', (response)=>{
+        console.log(response);
+      })
     });
     return () => {
       newSocket.disconnect();
@@ -106,7 +112,7 @@ export default function Charting() {
   const handleBuySubmit = (e) => {
     e.preventDefault();
     if (price>lowercirc && price<uppercirc){
-      if (socket && shareName && price && qty) {
+      if (socket && shareName && price && qty){
         socket.emit('buyOrder', { shareName, price, qty });
         setPrice("");
         setQty('');
@@ -118,7 +124,7 @@ export default function Charting() {
       }
     }else{
       // setNotInRange(true);
-      console.log('sorry')
+      console.log('sorry');
     }
   };
 
@@ -151,8 +157,31 @@ export default function Charting() {
     }
   };
 
-  const toggleBuy = () => setBuy(!buy);
+  const addAlert = async (e) => {
+    e.preventDefault();
+    try{
+      let response = await axios.post("http://localhost:5000/api/invest/users/setAlert",{
+        body:{
+          shareName: shareName,
+          price: alertPrice
+        }
+      }).then(()=>{
+        console.log(response);
+      })
+    }catch(err){
+      console.log(err);
+    }
+  }
 
+  const toggleBuy = () => setBuy(!buy);
+  const toogleAlertBars = ()=>{
+    if (alertTopBar){
+      setAlertTopBar(false);
+    }
+    if (!alertTopBar){
+      setAlertTopBar(true);
+    }
+  }
   const data = {
     labels: ['', '', '', '','', '', '', '','', '', '','','','','','','','','',"",'','',"","","","","","","","","",'', '', '', '','', '', '', '','', '', '','','','','','','','','',"",'','',"","","","","","","","","",'', '', '', '','', '', '', '','', '', '','','','','','','','','',"",'','',"","","","","","","","","",'', '', '', '','', '', '', '','', '', '','','','','','','','','',"",'','',"","","","","","","","",""],
     datasets: [
@@ -175,6 +204,7 @@ export default function Charting() {
 
   return (
     <div className="primary-flex mar-main-extra">
+      {/* <Wishlists shareName={shareName}></Wishlists> */}
       <div className="float-10" />
       <div className="primary-flex flex-col float-55">
         <img src={logo} alt="Logo" className="logo-img-stk back-white-round"/>
@@ -182,7 +212,13 @@ export default function Charting() {
           <span className="font-roboto whiten text-enlarge mar-bottom">{shareName}</span>
           <div className="primary-flex align-center">
             <span className="font-roboto whiten text-enlarge mar-right">{Marketvalue}</span>
-            <span className={`font-roboto ${change >= 0 ? 'active' : 'loss'}`}>{`${change} (${changePerc}%)`}</span>
+            <div className='width-full primary-flex'>
+              <span className={`font-roboto float-50 ${change >= 0 ? 'active' : 'loss'}`}>{`${change} (${changePerc}%)`}</span>
+              <div className='primary-flex justify-end width-full'>
+                <button className='primary-flex align-center padding-sml border-remove'>Add To Watchlist</button>
+                <button className='primary-flex align-center padding-sml mar-left-sml border-remove' onClick={toogleAlertBars}>Set Alert</button>
+              </div>
+            </div>
           </div>
           <div style={{ height: '200px', width: '100%' }} className="mar-top">
             <Line data={data} options={options} />
@@ -234,37 +270,56 @@ export default function Charting() {
               <span className="font-small">{`ISE - ₹${Marketvalue}`}</span>
             </div>
           </div>
-          <div className="primary-flex border-bottom">
-            <button className={`padding-sml mar-top-sml ${buy ? 'make-active' : ''}`} id="buy" onClick={toggleBuy}>BUY</button>
-            <button className={`padding-sml mar-top-sml ${!buy ? 'make-active' : ''}`} id="sell" onClick={toggleBuy}>SELL</button>
-          </div>
-          <form className="primary-grid">
-            <div className="primary-flex font-roboto padding-sml transform-down">
-              <span className="whiten float-50 transform-down">Quantity</span>
-              <div className="float-50 primary-flex justify-end mar-right">
-                <input type="text" className="inpt" name="qty" value={qty} onChange={(e) => setQty(e.target.value)}/>
-              </div>
+          {alertTopBar?(
+            <div className="primary-flex border-bottom">
+              <button className="padding-sml mar-top-sml">{`Set Alerts For ${shareName}`}</button>
             </div>
-            <div className="primary-flex font-roboto padding-sml">
-              <span className="whiten float-50">Price</span>
-              <div className="float-50 primary-flex justify-end mar-right">
-                <input type="text" className="inpt" placeholder="At Market" name="price" value={price} onChange={(e) => setPrice(e.target.value)}/>
-              </div>
+          ):(
+            <div className="primary-flex border-bottom">
+              <button className={`padding-sml mar-top-sml ${buy ? 'make-active' : ''}`} id="buy" onClick={toggleBuy}>BUY</button>
+              <button className={`padding-sml mar-top-sml ${!buy ? 'make-active' : ''}`} id="sell" onClick={toggleBuy}>SELL</button>
             </div>
-            <div className="height-main" />
-            {notInRange ? (
-              <div className="primary-flex justify-center mar-top-sml">
-                <div className="primary-flex justify-center font-roboto background-light-red whiten width-80 border-5 padding-small">Limit Price Should Be Between {lowercirc} and {uppercirc}</div>
+          )}
+          {alertTopBar?(
+            <form className="primary-grid">
+              <div className="primary-flex font-roboto padding-sml transform-down">
+                <span className="whiten float-50 transform-down">Price</span>
+                <div className="float-50 primary-flex justify-end mar-right">
+                  <input type="text" className="inpt" name="qty" value={alertPrice} onChange={(e) => setAlertPrice(e.target.value)}/>
+                </div>
               </div>
-            ):(
-              <div></div>
+              <div className="height-main"/>
+                <button type="submit" className="order-placer" onClick={addAlert}>Set Alert</button>
+            </form>
+          ):(
+            <form className="primary-grid">
+              <div className="primary-flex font-roboto padding-sml transform-down">
+                <span className="whiten float-50 transform-down">Quantity</span>
+                <div className="float-50 primary-flex justify-end mar-right">
+                  <input type="text" className="inpt" name="qty" value={qty} onChange={(e) => setQty(e.target.value)}/>
+                </div>
+              </div>
+              <div className="primary-flex font-roboto padding-sml">
+                <span className="whiten float-50">Price</span>
+                <div className="float-50 primary-flex justify-end mar-right">
+                  <input type="text" className="inpt" placeholder="At Market" name="price" value={price} onChange={(e) => setPrice(e.target.value)}/>
+                </div>
+              </div>
+              <div className="height-main"/>
+              {notInRange ? (
+                <div className="primary-flex justify-center mar-top-sml">
+                  <div className="primary-flex justify-center font-roboto background-light-red whiten width-80 border-5 padding-small">Limit Price Should Be Between {lowercirc} and {uppercirc}</div>
+                </div>
+              ):(
+                <div></div>
+              )}
+              {buy ? (
+                <button type="submit" className="order-placer" onClick={handleBuySubmit}>BUY</button>
+              ) : (
+                <button type="button" className="order-placer-sell" onClick={handleSellSubmit}>SELL</button>
             )}
-            {buy ? (
-              <button type="submit" className="order-placer" onClick={handleBuySubmit}>BUY</button>
-            ) : (
-              <button type="button" className="order-placer-sell" onClick={handleSellSubmit}>SELL</button>
-            )}
-          </form>
+            </form>
+          )}
         </div>
         )}
       </div>
